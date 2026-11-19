@@ -29,16 +29,16 @@ namespace SDG.Unturned
 			return result;
 		}
 
-		public static Asset Get(NetItemId key)
+		public static ItemAsset Get(NetItemId key)
 		{
-			Asset value;
+			ItemAsset value;
 			_idPairings.TryGetValue(key, out value);
 			return value;
 		}
 
-		public static T GetAsset<T>(NetItemId key) where T : Asset
+		public static T GetAsset<T>(NetItemId key) where T : ItemAsset
 		{
-			Asset value = Get(key);
+			ItemAsset value = Get(key);
 			// Prevent exception.
 			return value == null ? null : value as T;
 		}
@@ -49,7 +49,7 @@ namespace SDG.Unturned
 			return _assetPairings.TryGetValue(assetGuid, out value) ? value : NetItemId.INVALID;
 		}
 
-		public static NetItemId GetId(Asset asset)
+		public static NetItemId GetId(ItemAsset asset)
 		{
 			return GetId(asset.GUID);
 		}
@@ -63,13 +63,39 @@ namespace SDG.Unturned
 
 		public static bool Release(NetItemId key)
 		{
-			Asset asset;
+			ItemAsset asset;
 			bool result = _idPairings.TryGetValue(key, out asset);
 			_idPairings.Remove(key);
 			if (result)
 				_assetPairings.Remove(asset.GUID, out _);
 			Log(result ? $"Released NetItemID {key}" : $"Released unused NetItemID {key}");
 			return result;
+		}
+
+		/// <param name="state">Legacy state that includes dynamic ushort IDs.</param>
+		/// <returns>State meant for savedata.</returns>
+		public static byte[] ConvertToSavedataState(ItemAsset asset, byte[] state)
+		{
+			if (asset is ItemStorageAsset storage)
+				return storage.ConvertStateToSavedata(state);
+			else if (asset is ItemBarricadeAsset barricade)
+				return barricade.ConvertStateToSavedata(state);
+			else if (asset is ItemGunAsset gun)
+				return gun.ConvertStateToSavedata(state);
+			return state;
+		}
+
+		/// <param name="state">Legacy state that includes ushort IDs.</param>
+		/// <returns>Legacy state for items that includes dynamic ushort IDs.</returns>
+		public static byte[] ConvertToLegacyState(ItemAsset asset, byte[] state)
+		{
+			if (asset is ItemStorageAsset storage)
+				return storage.ConvertStateFromSavedata(state);
+			else if (asset is ItemBarricadeAsset barricade)
+				return barricade.ConvertStateFromSavedata(state);
+			else if (asset is ItemGunAsset gun)
+				return gun.ConvertStateFromSavedata(state);
+			return state;
 		}
 
 		// Jdance 2026-11-18: I will keep this under the same compiler flag for now. Not sure if a
@@ -82,7 +108,7 @@ namespace SDG.Unturned
 
 		private static uint _counter;
 
-		private static Dictionary<NetItemId, Asset> _idPairings = new Dictionary<NetItemId, Asset>();
+		private static Dictionary<NetItemId, ItemAsset> _idPairings = new Dictionary<NetItemId, ItemAsset>();
 
 		private static Dictionary<Guid, NetItemId> _assetPairings = new Dictionary<Guid, NetItemId>();
 	}

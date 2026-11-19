@@ -2,8 +2,11 @@
 // This file is part of the U3 SDK: https://github.com/smartlydressedgames/u3-sdk/    //
 // Please refer to the included LICENSE.txt for copyright notice and license details. //
 ////////////////////////////////////////////////////////////////////////////////////////
+using System;
+using System.Buffers.Binary;
 using UnityEngine;
 using Unturned.SystemEx;
+using Random = UnityEngine.Random;
 
 namespace SDG.Unturned
 {
@@ -54,7 +57,7 @@ namespace SDG.Unturned
 		Always,
 	}
 
-	public class ItemGunAsset : ItemWeaponAsset
+	public class ItemGunAsset : ItemWeaponAsset, IStateConversion
 	{
 		protected AudioClip _shoot;
 		public AudioClip shoot => _shoot;
@@ -1437,6 +1440,46 @@ namespace SDG.Unturned
 		public ushort getMagazineID()
 		{
 			return GetDefaultMagazineLegacyId();
+		}
+
+		// Jdance 2026-11-18: I originally wanted to essentially write C code for this, but I settled
+		// on Span. Writing code like this with the hardcoded offsets raises the likelihood of issues.
+		// However, these methods should be temporary in terms of item states. State system should be
+		// replaced eventually.
+		/// <summary>
+		/// Converts legacy state to a savedata version that stores GUIDs.
+		/// </summary>
+		/// <param name="state">Legacy item state.</param>
+		/// <returns>Savedata item state.</returns>
+		public byte[] ConvertStateToSavedata(byte[] state)
+		{
+
+			byte[] savedataState = new byte[88];
+			Span<byte> savedataSpan = new Span<byte>(savedataState);
+			Span<byte> stateSpan = new Span<byte>(state);
+			NetItemIdRegistry.Get(new NetItemId(BitConverter.ToUInt16(state, 0))).GUID.TryWriteBytes(savedataSpan);
+			NetItemIdRegistry.Get(new NetItemId(BitConverter.ToUInt16(state, 2))).GUID.TryWriteBytes(savedataSpan[16..]);
+			NetItemIdRegistry.Get(new NetItemId(BitConverter.ToUInt16(state, 4))).GUID.TryWriteBytes(savedataSpan[32..]);
+			NetItemIdRegistry.Get(new NetItemId(BitConverter.ToUInt16(state, 6))).GUID.TryWriteBytes(savedataSpan[48..]);
+			NetItemIdRegistry.Get(new NetItemId(BitConverter.ToUInt16(state, 8))).GUID.TryWriteBytes(savedataSpan[64..]);
+			stateSpan[10..].CopyTo(savedataSpan[80..]);
+
+			return savedataState;
+		}
+
+		public byte[] ConvertStateFromSavedata(byte[] state)
+		{
+			byte[] legacyState = new byte[18];
+			Span<byte> legacySpan = new Span<byte>(legacyState);
+			Span<byte> savedataSpan = new Span<byte>(state);
+			BinaryPrimitives.WriteUInt16LittleEndian(legacySpan, NetItemIdRegistry.GetId(new Guid(savedataSpan[..16])).LegacyId);
+			BinaryPrimitives.WriteUInt16LittleEndian(legacySpan[2..], NetItemIdRegistry.GetId(new Guid(savedataSpan.Slice(16, 16))).LegacyId);
+			BinaryPrimitives.WriteUInt16LittleEndian(legacySpan[4..], NetItemIdRegistry.GetId(new Guid(savedataSpan.Slice(32, 16))).LegacyId);
+			BinaryPrimitives.WriteUInt16LittleEndian(legacySpan[6..], NetItemIdRegistry.GetId(new Guid(savedataSpan.Slice(48, 16))).LegacyId);
+			BinaryPrimitives.WriteUInt16LittleEndian(legacySpan[8..], NetItemIdRegistry.GetId(new Guid(savedataSpan.Slice(64, 16))).LegacyId);
+			savedataSpan[80..].CopyTo(legacySpan[10..]);
+
+			return legacyState;
 		}
 	}
 }

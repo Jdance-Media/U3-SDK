@@ -2,11 +2,14 @@
 // This file is part of the U3 SDK: https://github.com/smartlydressedgames/u3-sdk/    //
 // Please refer to the included LICENSE.txt for copyright notice and license details. //
 ////////////////////////////////////////////////////////////////////////////////////////
+using System;
+using System.Buffers.Binary;
+using System.IO;
 using Unturned.SystemEx;
 
 namespace SDG.Unturned
 {
-	public class ItemStorageAsset : ItemBarricadeAsset
+	public class ItemStorageAsset : ItemBarricadeAsset, IStateConversion
 	{
 		protected byte _storage_x;
 		public byte storage_x => _storage_x;
@@ -144,6 +147,96 @@ namespace SDG.Unturned
 			data.Append("Storage_Y", storage_y);
 			data.Append("Display", isDisplay);
 			data.Append("Should_Close_When_Outside_Range", shouldCloseWhenOutsideRange);
+		}
+
+		public new byte[] ConvertStateToSavedata(byte[] state)
+		{
+			if (state == null || state.Length < 17)
+			{
+				return state;
+			}
+
+			ReadOnlySpan<byte> stateSpan = state;
+			Span<byte> guidBytes = stackalloc byte[16];
+			byte count = state[16];
+			// This is agruably the best way to deal with the variable state size for now.
+			using (MemoryStream stream = new MemoryStream(state.Length + count * 14))
+			{
+				stream.Write(stateSpan[..17]);
+
+				int offset = 17;
+				for (byte index = 0; index < count; index++)
+				{
+					// x, y, and rot
+					stream.Write(stateSpan.Slice(offset, 3));
+
+					NetItemId netItemId = new NetItemId(BinaryPrimitives.ReadUInt16LittleEndian(stateSpan.Slice(offset + 3, 2)));
+					ItemAsset itemAsset = NetItemIdRegistry.Get(netItemId);
+					Guid itemGuid = itemAsset != null ? itemAsset.GUID : Guid.Empty;
+					itemGuid.TryWriteBytes(guidBytes);
+					stream.Write(guidBytes);
+
+					// amount, and quality
+					stream.Write(stateSpan.Slice(offset + 5, 2));
+
+					byte itemStateLength = state[offset + 7];
+					byte[] itemState = stateSpan.Slice(offset + 8, itemStateLength).ToArray();
+					stream.WriteByte((byte) itemState.Length);
+					stream.Write(itemState, 0, itemState.Length);
+
+					offset += 8 + itemStateLength;
+				}
+
+				// Rest of the data that offset by the variable size.
+				stream.Write(stateSpan[offset..]);
+
+				return stream.ToArray();
+			}
+		}
+
+		public new byte[] ConvertStateFromSavedata(byte[] state)
+		{
+			if (state == null || state.Length < 17)
+			{
+				return state;
+			}
+
+			ReadOnlySpan<byte> savedataSpan = state;
+			Span<byte> idBytes = stackalloc byte[2];
+			using (MemoryStream stream = new MemoryStream(state.Length))
+			{
+				stream.Write(savedataSpan[..17]);
+
+				byte count = state[16];
+				int offset = 17;
+				for (byte index = 0; index < count; index++)
+				{
+					// x, y, rot
+					stream.Write(savedataSpan.Slice(offset, 3));
+
+					// InteractableStorage.updateState *should* skip the invalid ID (0).
+					NetItemId netItemId = NetItemIdRegistry.GetId(new Guid(savedataSpan.Slice(offset + 3, 16)));
+					ItemAsset itemAsset = NetItemIdRegistry.Get(netItemId);
+					BinaryPrimitives.WriteUInt16LittleEndian(idBytes, netItemId.LegacyId);
+					stream.Write(idBytes);
+
+					// amount, quality
+					stream.Write(savedataSpan.Slice(offset + 19, 2));
+
+					byte itemSavedataStateLength = state[offset + 21];
+					byte[] itemSavedataState = savedataSpan.Slice(offset + 22, itemSavedataStateLength).ToArray();
+					stream.WriteByte((byte) itemSavedataState.Length);
+					stream.Write(itemSavedataState, 0, itemSavedataState.Length);
+
+					offset += 22 + itemSavedataStateLength;
+				}
+
+				// This write lasts for however long the rest of the state is. If the asset later becomes a
+				// display or vice-versa, the modder is technically at fault for anything bad that occurs.
+				stream.Write(savedataSpan[offset..]);
+
+				return stream.ToArray();
+			}
 		}
 	}
 }

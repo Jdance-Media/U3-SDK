@@ -2,12 +2,14 @@
 // This file is part of the U3 SDK: https://github.com/smartlydressedgames/u3-sdk/    //
 // Please refer to the included LICENSE.txt for copyright notice and license details. //
 ////////////////////////////////////////////////////////////////////////////////////////
+using System;
+using System.Buffers.Binary;
 using UnityEngine;
 using UnityEngine.Profiling;
 
 namespace SDG.Unturned
 {
-	public class ItemBarricadeAsset : ItemPlaceableAsset
+	public class ItemBarricadeAsset : ItemPlaceableAsset, IStateConversion
 	{
 		protected GameObject _barricade;
 		public GameObject barricade => _barricade;
@@ -600,6 +602,63 @@ namespace SDG.Unturned
 			{
 				return new AudioReference("core.masterbundle", "Sounds/Inventory/HeavyMetalEquipment.asset");
 			}
+		}
+
+		public byte[] ConvertStateToSavedata(byte[] state)
+		{
+			if (build != EBuild.MANNEQUIN)
+				return state;
+			
+			byte[] savedataState = new byte[state.Length + 98];
+			Span<byte> savedataSpan = new Span<byte>(savedataState);
+			Span<byte> stateSpan = new Span<byte>(state);
+			stateSpan[..44].CopyTo(savedataSpan);
+			(NetItemIdRegistry.Get(new NetItemId(BitConverter.ToUInt16(state, 44)))?.GUID ?? Guid.Empty).TryWriteBytes(savedataSpan[44..]);
+			stateSpan.Slice(46, 1).CopyTo(savedataSpan[60..]);
+			(NetItemIdRegistry.Get(new NetItemId(BitConverter.ToUInt16(state, 47)))?.GUID ?? Guid.Empty).TryWriteBytes(savedataSpan[61..]);
+			stateSpan.Slice(49, 1).CopyTo(savedataSpan[77..]);
+			(NetItemIdRegistry.Get(new NetItemId(BitConverter.ToUInt16(state, 50)))?.GUID ?? Guid.Empty).TryWriteBytes(savedataSpan[78..]);
+			stateSpan.Slice(52, 1).CopyTo(savedataSpan[94..]);
+			(NetItemIdRegistry.Get(new NetItemId(BitConverter.ToUInt16(state, 53)))?.GUID ?? Guid.Empty).TryWriteBytes(savedataSpan[95..]);
+			stateSpan.Slice(55, 1).CopyTo(savedataSpan[111..]);
+			(NetItemIdRegistry.Get(new NetItemId(BitConverter.ToUInt16(state, 56)))?.GUID ?? Guid.Empty).TryWriteBytes(savedataSpan[112..]);
+			stateSpan.Slice(58, 1).CopyTo(savedataSpan[128..]);
+			(NetItemIdRegistry.Get(new NetItemId(BitConverter.ToUInt16(state, 59)))?.GUID ?? Guid.Empty).TryWriteBytes(savedataSpan[129..]);
+			stateSpan.Slice(61, 1).CopyTo(savedataSpan[145..]);
+			(NetItemIdRegistry.Get(new NetItemId(BitConverter.ToUInt16(state, 62)))?.GUID ?? Guid.Empty).TryWriteBytes(savedataSpan[146..]);
+			stateSpan.Slice(64, 1).CopyTo(savedataSpan[162..]);
+			stateSpan[65..].CopyTo(savedataSpan[163..]);
+
+			return savedataState;
+
+		}
+
+		public byte[] ConvertStateFromSavedata(byte[] state)
+		{
+			if (build != EBuild.MANNEQUIN)
+				return state;
+
+			byte[] legacyState = new byte[state.Length - 98];
+			Span<byte> legacySpan = new Span<byte>(legacyState);
+			Span<byte> savedataSpan = new Span<byte>(state);
+			savedataSpan[..44].CopyTo(legacySpan);
+			BinaryPrimitives.WriteUInt16LittleEndian(legacySpan[44..], NetItemIdRegistry.GetId(new Guid(savedataSpan.Slice(44, 16))).LegacyId);
+			savedataSpan.Slice(60, 1).CopyTo(legacySpan[46..]);
+			BinaryPrimitives.WriteUInt16LittleEndian(legacySpan[47..], NetItemIdRegistry.GetId(new Guid(savedataSpan.Slice(61, 16))).LegacyId);
+			savedataSpan.Slice(77, 1).CopyTo(legacySpan[49..]);
+			BinaryPrimitives.WriteUInt16LittleEndian(legacySpan[50..], NetItemIdRegistry.GetId(new Guid(savedataSpan.Slice(78, 16))).LegacyId);
+			savedataSpan.Slice(94, 1).CopyTo(legacySpan[52..]);
+			BinaryPrimitives.WriteUInt16LittleEndian(legacySpan[53..], NetItemIdRegistry.GetId(new Guid(savedataSpan.Slice(95, 16))).LegacyId);
+			savedataSpan.Slice(111, 1).CopyTo(legacySpan[55..]);
+			BinaryPrimitives.WriteUInt16LittleEndian(legacySpan[56..], NetItemIdRegistry.GetId(new Guid(savedataSpan.Slice(112, 16))).LegacyId);
+			savedataSpan.Slice(128, 1).CopyTo(legacySpan[58..]);
+			BinaryPrimitives.WriteUInt16LittleEndian(legacySpan[59..], NetItemIdRegistry.GetId(new Guid(savedataSpan.Slice(129, 16))).LegacyId);
+			savedataSpan.Slice(145, 1).CopyTo(legacySpan[61..]);
+			BinaryPrimitives.WriteUInt16LittleEndian(legacySpan[62..], NetItemIdRegistry.GetId(new Guid(savedataSpan.Slice(146, 16))).LegacyId);
+			savedataSpan.Slice(162, 1).CopyTo(legacySpan[64..]);
+			savedataSpan[163..].CopyTo(legacySpan[65..]);
+
+			return legacyState;
 		}
 	}
 }

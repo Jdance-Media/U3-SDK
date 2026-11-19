@@ -93,7 +93,7 @@ namespace SDG.Unturned
 		/// <summary>
 		/// Used to have the dynamic ID system imitate legacy IDs.
 		/// </summary>
-		public ushort LeagcyId { get => (ushort) _id; }
+		public ushort LegacyId { get => (ushort) _id; }
 	}
 
 	// Jdance 2026-11-18: PakEx class will be added later on. Right now imitation of ushort IDs doesn't need it.

@@ -9,10 +9,12 @@
 using SDG.NetPak;
 using SDG.NetTransport;
 using Steamworks;
+using System;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Profiling;
 using Unturned.SystemEx;
+using Random = UnityEngine.Random;
 
 namespace SDG.Unturned
 {
@@ -1858,6 +1860,9 @@ namespace SDG.Unturned
 
 		private bool wasLoadCalled;
 
+		/// <summary>
+		/// Loads the inventory data of the player onto the server. Should only be done when the dynamic ID mappings are done.
+		/// </summary>
 		public void load()
 		{
 			wasLoadCalled = true;
@@ -1883,17 +1888,21 @@ namespace SDG.Unturned
 							{
 								rot = block.readByte();
 							}
-
-							ushort id = block.readUInt16();
+							ushort id = 0;
+							Guid guid = Guid.Empty;
+							if (version < 5)
+								id = block.readUInt16();
+							else
+								guid = block.readGUID();
 							byte amount = block.readByte();
 							byte quality = block.readByte();
 							byte[] state = block.readByteArray();
 
-							ItemAsset asset = Assets.find(EAssetType.ITEM, id) as ItemAsset;
+							ItemAsset asset = version > 5 ? Assets.find<ItemAsset>(guid) : Assets.find(EAssetType.ITEM, id) as ItemAsset;
 
 							if (asset != null)
 							{
-								items[page].loadItem(x, y, rot, new Item(id, amount, quality, state));
+								items[page].loadItem(x, y, rot, new Item(id, amount, quality, NetItemIdRegistry.ConvertToLegacyState(asset, state)));
 							}
 						}
 					}
@@ -1999,7 +2008,8 @@ namespace SDG.Unturned
 						block.writeByte(jar != null ? jar.y : (byte) 0);
 						block.writeByte(jar != null ? jar.rot : (byte) 0);
 
-						block.writeUInt16(jar != null ? jar.item.id : (ushort) 0);
+						//block.writeUInt16(jar != null ? jar.item.id : (ushort) 0);
+						block.writeGUID(jar != null ? jar.GetAsset().GUID : Guid.Empty);
 						block.writeByte(jar != null ? jar.item.amount : (byte) 0);
 						block.writeByte(jar != null ? jar.item.quality : (byte) 0);
 						block.writeByteArray(jar != null ? jar.item.state : new byte[0]);
